@@ -22,14 +22,28 @@ class Server:
         picked = False
         last_action = None
         recharging = False
+        temp_data = ""
+        processed = False
+
 
         try:
             while True:
-                data = connection.recv(1024)
-                decoded = decode_message(data)
+                if not processed:
+                    data = connection.recv(1024).decode("utf-8")
+                    print(data)
+                    temp_data += data
 
-                if not data:
+                before, sep, after = temp_data.partition("\a\b")
+
+                if sep == "":
                     continue
+
+                decoded = decode_message(before, phase, picked, last_action)
+                temp_data = after
+                if before and after and "\a\b" in after:
+                    processed = True
+                else:
+                    processed = False
 
                 print("Received: ", decoded, sep="")
 
@@ -105,9 +119,6 @@ class Server:
                     if picked and decoded != "" and last_action != SERVER_TURN_RIGHT and last_action != SERVER_TURN_LEFT:
                         phase = 42
                     else:
-                        # if last_action == SERVER_MOVE and actual_position != (int(split[1]), int(split[2])):
-                        #     actual_position = (int(split[1]), int(split[2]))
-                        #     picked = True
                         action, actual_position, direction, picked = search_box(actual_position, direction, picked)
                         print("Sending: ", action, sep="")
                         print("Position: ", actual_position, "   Direction: ", direction)
@@ -119,8 +130,13 @@ class Server:
                     connection.sendall(create_message(SERVER_LOGOUT))
                     break
 
-        except timeout:
+        except timeout as e:
             print("Timeout!")
+
+        except InvalidMessage as e:
+            print("Sending: ", SERVER_SYNTAX_ERROR, sep="")
+            print(e, sep="")
+            connection.sendall(create_message(SERVER_SYNTAX_ERROR))
 
         finally:
             connection.close()
@@ -128,6 +144,6 @@ class Server:
     def run(self):
         while True:
             connection, address = self.sock.accept()
-            connection.settimeout(10000000)
+            connection.settimeout(TIMEOUT)
             t = Thread(target=self.handler, args=(connection, address))
             t.start()

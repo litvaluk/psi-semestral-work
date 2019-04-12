@@ -8,15 +8,6 @@ SERVER_LOGIN_FAILED = "300 LOGIN FAILED"
 SERVER_SYNTAX_ERROR = "301 SYNTAX ERROR"
 SERVER_LOGIC_ERROR = "302 LOGIC ERROR"
 
-MAX_SERVER_CONFIRMATION = 5
-
-MAX_CLIENT_USERNAME = 12
-MAX_CLIENT_CONFIRMATION = 7
-MAX_CLIENT_OK = 12
-MAX_CLIENT_RECHARGING = 12
-MAX_CLIENT_FULL_POWER = 12
-MAX_CLIENT_MESSAGE = 100
-
 SERVER_KEY = 54621
 CLIENT_KEY = 45328
 
@@ -29,14 +20,38 @@ DOWN = 2
 LEFT = 3
 
 
+class InvalidMessage(Exception):
+    pass
+
+
 def create_message(message):
     if type(message) != str:
         return (str(message) + "\a\b").encode("utf-8")
     return (message + "\a\b").encode("utf-8")
 
 
-def decode_message(message):
-    return message.decode("utf-8")[:-2]
+def decode_message(message, phase, picked, last_action):
+    if phase == 0 and len(message) > 10:
+        raise InvalidMessage("Username too long")
+    elif phase == 1 and len(message) > 5 and message != "RECHARGING" and message != "FULL POWER":
+        raise InvalidMessage("Client confirmation too long")
+    elif phase == 1 and not message.isnumeric() and message != "RECHARGING" and message != "FULL POWER":
+        raise InvalidMessage("Client confirmation not numeric")
+    elif (phase == 2 or phase == 3 or phase == 4) and len(message) > 10 and last_action != SERVER_PICK_UP:
+        raise InvalidMessage("Client action too long")
+    elif (phase == 2 or phase == 3 or phase == 4) and last_action != SERVER_PICK_UP and message != "RECHARGING" and message != "FULL POWER":
+        if message.strip() != message:
+            raise InvalidMessage("Invalid format of client ok response")
+        split = message.split(" ")
+        if split[0] != "OK":
+            raise InvalidMessage("Invalid format of client ok response")
+        x = float(split[1])
+        y = float(split[2])
+        if not x.is_integer() or not y.is_integer():
+            raise InvalidMessage("One or both the coordinates is not an integer")
+    elif last_action == SERVER_PICK_UP and len(message) > 98 and message != "RECHARGING" and message != "FULL POWER":
+        raise InvalidMessage("Message too long")
+    return message
 
 
 def compute_hash(username):
@@ -126,7 +141,7 @@ def search_box(position, direction, picked):
         x, y = position
         picked = False
 
-        if x%2 == 0:
+        if x % 2 == 0:
             if y != -2:
                 if direction == RIGHT:
                     return SERVER_TURN_RIGHT, position, DOWN, picked

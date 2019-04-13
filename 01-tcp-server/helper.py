@@ -30,26 +30,65 @@ def create_message(message):
     return (message + "\a\b").encode("utf-8")
 
 
-def decode_message(message, phase, picked, last_action):
-    if phase == 0 and len(message) > 10:
+def syntax_check(message, phase, last_action, sep):
+    print("Syntax check: ", message, sep="")
+    a_at_end = False
+    now_separated = False
+
+    if sep == "\a\b":
+        now_separated = True
+
+    if len(message) > 0 and message[len(message) - 1] == "\a":
+        a_at_end = True
+        offset = 1
+    else:
+        offset = 2
+
+    if phase == 0 and len(message) > 12 - offset:
         raise InvalidMessage("Username too long")
-    elif phase == 1 and len(message) > 5 and message != "RECHARGING" and message != "FULL POWER":
+    elif phase == 1 and len(message) > 7 - offset and message != "RECHARGING"[:len(message)] and message != "FULL POWER"[:len(message)]:
         raise InvalidMessage("Client confirmation too long")
-    elif phase == 1 and not message.isnumeric() and message != "RECHARGING" and message != "FULL POWER":
-        raise InvalidMessage("Client confirmation not numeric")
-    elif (phase == 2 or phase == 3 or phase == 4) and len(message) > 10 and last_action != SERVER_PICK_UP:
+    elif phase == 1 and message != "RECHARGING"[:len(message)] and message != "FULL POWER"[:len(message)]:
+        if (a_at_end and not message[:-1].isnumeric()) or (not a_at_end and not message.isnumeric()):
+            raise InvalidMessage("Client confirmation not numeric")
+    elif (phase == 2 or phase == 3 or phase == 4) and len(message) > 12 - offset and last_action != SERVER_PICK_UP:
         raise InvalidMessage("Client action too long")
-    elif (phase == 2 or phase == 3 or phase == 4) and last_action != SERVER_PICK_UP and message != "RECHARGING" and message != "FULL POWER":
-        if message.strip() != message:
-            raise InvalidMessage("Invalid format of client ok response")
+    elif (phase == 2 or phase == 3 or phase == 4) and last_action != SERVER_PICK_UP and message != "RECHARGING\a"[:len(message)] and message != "FULL POWER\a"[:len(message)]:
         split = message.split(" ")
-        if split[0] != "OK":
+
+        if len(split) > 3:
             raise InvalidMessage("Invalid format of client ok response")
-        x = float(split[1])
-        y = float(split[2])
-        if not x.is_integer() or not y.is_integer():
-            raise InvalidMessage("One or both the coordinates is not an integer")
-    elif last_action == SERVER_PICK_UP and len(message) > 98 and message != "RECHARGING" and message != "FULL POWER":
+
+        if len(split) == 1:
+            if split[0] != "OK" and split[0] != "O":
+                raise InvalidMessage("Wrong format of the client action")
+        if len(split) == 2:
+            if split[0] != "OK" or split[1][-1:] == "\a":
+                raise InvalidMessage("Wrong format of the client action")
+            if split[1] != "-" and split[1] != "":
+                x = None
+                try:
+                    x = float(split[1])
+                except ValueError as e:
+                    raise InvalidMessage("Wrong format of the client action")
+                if not x.is_integer():
+                    raise InvalidMessage("Wrong format of the client action")
+        if len(split) == 3:
+            if split[0] != "OK" or split[1] == "-" or (split[2] == "-" and now_separated) or (len(split) > 1 and split[2][-2:] == "-\a" and now_separated):
+                raise InvalidMessage("Wrong format of the client action")
+            if split[2] != "" and split[2] != "-":
+                y = None
+                try:
+                    if a_at_end:
+                        y = float(split[2][:-1])
+                    else:
+                        y = float(split[2])
+                except ValueError as e:
+                    raise InvalidMessage("Wrong format of the client action")
+                if not y.is_integer():
+                    raise InvalidMessage("Wrong format of the client action")
+
+    elif last_action == SERVER_PICK_UP and len(message) > 100 - offset and message != "RECHARGING"[:len(message)] and message != "FULL POWER"[:len(message)]:
         raise InvalidMessage("Message too long")
     return message
 
@@ -161,3 +200,5 @@ def search_box(position, direction, picked):
                     return SERVER_TURN_RIGHT, position, RIGHT, True
                 else:
                     return SERVER_MOVE, (x+1, y), RIGHT, picked
+
+# print("RECHARGING"[:20])

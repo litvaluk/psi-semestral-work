@@ -25,27 +25,28 @@ class Server:
         temp_data = ""
         processed = False
 
-
         try:
             while True:
                 if not processed:
                     data = connection.recv(1024).decode("utf-8")
-                    print(data)
+                    # print(data)
                     temp_data += data
 
                 before, sep, after = temp_data.partition("\a\b")
+                syntax_check(before, phase, last_action, sep)
 
                 if sep == "":
                     continue
 
-                decoded = decode_message(before, phase, picked, last_action)
+                decoded = before
                 temp_data = after
+
+                print("Received: ", decoded, sep="")
+
                 if before and after and "\a\b" in after:
                     processed = True
                 else:
                     processed = False
-
-                print("Received: ", decoded, sep="")
 
                 if decoded == "RECHARGING":
                     connection.settimeout(TIMEOUT_RECHARGING)
